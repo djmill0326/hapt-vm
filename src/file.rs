@@ -1,35 +1,43 @@
-use std::marker::PhantomPinned;
+use std::{marker::PhantomPinned, borrow::Cow};
 
-use crate::device::Device;
+use crate::device::{Device, Interrupt, Info};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Handle<'a>(pub usize, pub &'a PhantomPinned);
 
 impl<'a> Handle<'a> {
-    fn new() -> Option<&'a Self> {
+    pub fn new() -> Option<&'a Self> {
         crate::global::push_handle()
     }
 
-    fn from(x: usize) -> Option<&'a Self> {
+    pub fn from(x: usize) -> Option<&'a Self> {
         crate::global::register_handle(Handle(x, &PhantomPinned))
     }
+
+    pub fn from_str(x: impl Into<String>) -> Option<&'a Self> {
+        let mut str: String = x.into();
+        crate::global::register_handle(Handle(str.as_mut_ptr() as usize, &PhantomPinned))
+    }
+}
+
+impl<'a> Info for Handle<'a> {
+    fn info(&self) -> Cow<str> {
+        format!("[file-handle/info] {:?}", self).into()
+    }
+}
+
+fn not_implemented<'a>() -> &'a Handle<'a> {
+    Handle::from(0).expect("uninit")
 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct File<'a>(pub Handle<'a>);
 
 impl<'a> File<'a> {
-    fn new() -> Self {
-        File(*Handle::new().expect("failed to get file handle"))
+    pub fn new() -> Self {
+        File(*Handle::new().expect(
+            "failed to get file handle"))
     }
-}
-
-#[derive(Clone, Copy, Debug)]
-#[repr(C)]
-pub enum FileOptions {
-    Read = 0,
-    Write = 1,
-    Flush = 2
 }
 
 impl<'a> Device<'a> for File<'a> {
@@ -40,26 +48,17 @@ impl<'a> Device<'a> for File<'a> {
     fn handle(&self) -> Handle {
         self.0
     }
+}
 
+impl<'a> Interrupt for File<'a> {
     fn interrupt(&self, code: usize, data: Option<Handle>) -> Result<Handle, Handle> {
-        let option: FileOptions = unsafe { std::mem::transmute(code as u32) };
-        match option {
-            FileOptions::Read => {
-                // io:read
-                // TODO: implement
-                Ok(Handle(0, &PhantomPinned))
-            },
-            FileOptions::Write => {
-                // io:write
-                // TODO: implement
-                Ok(self.0)
-            },
-            FileOptions::Flush => {
-                // io:flush
-                // TODO: implement
-                Ok(self.0)
-            }
-        }
+        todo!()
+    }
+}
+
+impl<'a> Info for File<'a> {
+    fn info(&self) -> Cow<str> {
+        format!("[file/info] {:?}", self).into()
     }
 }
 
@@ -67,17 +66,63 @@ impl<'a> Device<'a> for File<'a> {
 pub struct NamedFile<'a>(pub File<'a>, pub &'a str);
 
 impl<'a> NamedFile<'a> {
-    fn new(name: impl Into<&'a str>) -> Self{
+    pub fn new(name: impl Into<&'a str>) -> Self{
         NamedFile(File::new(), name.into())
     }
 }
 
-pub trait FileIO {
+impl<'a> Interrupt for NamedFile<'a> {
+    fn interrupt(&self, code: usize, data: Option<Handle>) -> Result<Handle, Handle> {
+        FileIO::interrupt(self, code, data)
+    }
+}
+
+impl<'a> Info for NamedFile<'a> {
+    fn info(&self) -> Cow<str> {
+        format!("[file/info] {:?}: {:?}", self.1, self.0).into()
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+pub enum FileOptions {
+    Info = 0,
+    Read = 1,
+    Write = 2,
+    Flush = 3
+}
+
+pub trait FileIO: Interrupt + Info {
     fn file(&self) -> &File;
+
+    fn interrupt(&self, code: usize, data: Option<Handle>) -> Result<Handle, Handle> {
+        let option: FileOptions = unsafe { std::mem::transmute(code as u32) };
+        match option {
+            FileOptions::Info => {
+                Ok(Handle::from_str(self.info()).expect("failed to get handle for string").to_owned())
+            },
+            FileOptions::Read => {
+                // io:read
+                // TODO: implement
+                Err(Handle(0, &PhantomPinned))
+            },
+            FileOptions::Write => {
+                // io:write
+                // TODO: implement
+                Ok(Handle(0, &PhantomPinned))
+            },
+            FileOptions::Flush => {
+                // io:flush
+                // TODO: implement
+                Ok(Handle(0, &PhantomPinned))
+            },
+            x => Ok(*not_implemented())
+        }
+    }
 
     fn io(&self, option: FileOptions, data: Option<Handle>) -> Result<Handle, Handle> {
         let code: u32 = unsafe { std::mem::transmute(option) };
-        self.file().interrupt(code as usize, data)
+        FileIO::interrupt(self, code as usize, data)
     }
 
     fn read(&self, data: Handle) -> Result<Handle, Handle> {
@@ -102,15 +147,5 @@ impl<'a> FileIO for File<'a> {
 impl<'a> FileIO for NamedFile<'a> {
     fn file(&self) -> &File {
         &self.0
-    }
-}
-
-pub trait Named<'a> {
-    fn name(&'a self) -> &'a str;
-}
-
-impl<'a> Named<'a> for NamedFile<'a> {
-    fn name(&'a self) -> &'a str {
-        self.1
     }
 }

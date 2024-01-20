@@ -1,3 +1,5 @@
+use crate::{file::FileIO, device::{Device, Info}};
+
 mod vm;
 mod interpreter;
 mod bytecode;
@@ -6,5 +8,10 @@ mod file;
 mod global;
 
 fn main() {
-    println!("Hello, world!");
+    let named_file = file::NamedFile::new("hapt");
+    let file = named_file.file();
+    let handle = file.handle();
+    println!("{}", handle.info());
+    println!("{}", file.info());
+    println!("{}", named_file.info());
 }
