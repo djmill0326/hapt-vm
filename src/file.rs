@@ -26,7 +26,7 @@ impl<'a> Info for Handle<'a> {
     }
 }
 
-fn not_implemented<'a>() -> &'a Handle<'a> {
+pub fn not_implemented<'a>() -> &'a Handle<'a> {
     Handle::from(0).expect("uninit")
 }
 
@@ -52,7 +52,7 @@ impl<'a> Device<'a> for File<'a> {
 
 impl<'a> Interrupt for File<'a> {
     fn interrupt(&self, code: usize, data: Option<Handle>) -> Result<Handle, Handle> {
-        todo!()
+        FileIO::interrupt(self, code, data)
     }
 }
 
@@ -116,7 +116,7 @@ pub trait FileIO: Interrupt + Info {
                 // TODO: implement
                 Ok(Handle(0, &PhantomPinned))
             },
-            x => Ok(*not_implemented())
+            _ => Interrupt::interrupt(self, code, data)
         }
     }
 
