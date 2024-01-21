@@ -6,12 +6,13 @@ mod bytecode;
 mod device;
 mod file;
 mod global;
+mod js;
 
 fn main() {
     let named_file = file::NamedFile::new("hapt");
-    let file = named_file.file();
-    let handle = file.handle();
+    let handle = named_file.file().handle();
     println!("{}", handle.info());
-    println!("{}", file.info());
     println!("{}", named_file.info());
+
+    js::init();
 }
